@@ -1,54 +1,47 @@
+const express = require('express');
 const puppeteer = require('puppeteer');
 const axios = require('axios');
-const fs = require('fs');
 
-const SLACK_WEBHOOK_URL = 'あなたのSlack Webhook URL';
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-(async () => {
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox']
-  });
-  const page = await browser.newPage();
-  await page.goto('https://kankyo-ichiba.jp/kyusyu', { waitUntil: 'networkidle2' });
+// SlackのWebhook URL（環境変数から取得）
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
-  // グラフ画像のスクショ
-  const graphSelector = '.market-graph img';
-  await page.waitForSelector(graphSelector);
-  const graphElement = await page.$(graphSelector);
-  await graphElement.screenshot({ path: 'graph.png' });
+app.get('/', async (req, res) => {
+  try {
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.goto('https://kankyo-ichiba.jp/kyusyu', { waitUntil: 'networkidle2' });
 
-  // 単価取得
-  const minSelector = '.market-tomorrow .market-price-min';
-  const maxSelector = '.market-tomorrow .market-price-max';
+    // 必要な値を抽出
+    const minSelector = '.market-tomorrow .market-price-min';
+    const maxSelector = '.market-tomorrow .market-price-max';
 
-  await page.waitForSelector(minSelector);
-  const minPrice = await page.$eval(minSelector, el => el.textContent.trim());
-  const maxPrice = await page.$eval(maxSelector, el => el.textContent.trim());
+    await page.waitForSelector(minSelector);
+    const minPrice = await page.$eval(minSelector, el => el.textContent.trim());
+    const maxPrice = await page.$eval(maxSelector, el => el.textContent.trim());
 
-  await browser.close();
+    await browser.close();
 
-  // Slack通知（グラフ画像付き）
-  const formData = {
-    text: `📊 *環境市場（九州）明日分の電気料金*\n\n🔻最安単価：${minPrice}\n🔺最高単価：${maxPrice}`,
-  };
+    const message = `📊 *環境市場 九州 明日分の電気料金*\n🔻最安単価: ${minPrice}\n🔺最高単価: ${maxPrice}`;
 
-  const image = fs.readFileSync('graph.png');
+    // Slackに送信
+    await axios.post(SLACK_WEBHOOK_URL, {
+      text: message,
+    });
 
-  // Slackへ画像投稿（multipart/form-data）
-  const FormData = require('form-data');
-  const form = new FormData();
-  form.append('file', image, {
-    filename: 'graph.png',
-    contentType: 'image/png',
-  });
-  form.append('initial_comment', formData.text);
-  form.append('channels', '#your-channel-name');
+    console.log('Slack通知を送信しました');
+    res.send('Slack通知を送信しました！');
+  } catch (error) {
+    console.error('エラー:', error);
+    res.status(500).send('エラーが発生しました');
+  }
+});
 
-  await axios.post('https://slack.com/api/files.upload', form, {
-    headers: {
-      ...form.getHeaders(),
-      Authorization: 'Bearer あなたのSlackボットトークン'
-    }
-  });
-})();
+app.listen(PORT, () => {
+  console.log(`サーバー起動中 http://localhost:${PORT}`);
+});
