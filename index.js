@@ -30,7 +30,7 @@ app.get('/', async (req, res) => {
     const message = `📊 *環境市場 九州 明日分の電気料金*\n🔻最安単価: ${minPrice}\n🔺最高単価: ${maxPrice}`;
 
     // Slackに送信
-    await axios.post(SLACK_WEBHOOK_URL, {
+    await axios.post(SLACK_WEBHOOK_URL, {https://hooks.slack.com/services/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
       text: message,
     });
 
